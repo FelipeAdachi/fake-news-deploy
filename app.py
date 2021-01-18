@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template
+from flask import Flask, request, render_template, jsonify
 from boilerpy3 import extractors
 import os
 from download_model import download_model_from_gcp
@@ -29,9 +29,13 @@ table = client.get_table(table_id)  # API request
 def my_form():
     return render_template('url_form.html')
 
-@app.route('/', methods=['POST'])
-def classify_news():
-    news_url = request.form['text']
+@app.route('/', methods=['POST'],defaults = {'from_home':True})
+@app.route('/api/classify_news', methods=['POST'], defaults = {'from_home' : False})
+def classify_news(from_home):
+    if from_home:
+        news_url = request.form['text']
+    else:
+        news_url = request.json['text']
 
     content,title = read_content_from_url(news_url)
     content_tfidf = preprocess_and_transform(content,title)
@@ -47,15 +51,17 @@ def classify_news():
         'prediction_date': datetime.datetime.now()
 
     }
-
     insert_to_bigquery(to_insert)
-
-    display = """
-    <h1 >{}</h1>
-    <p>This news is probably <b>{}</b>!</p>
-    <p>Prediction confidence: {}</p>
-    """.format(title,predicted_str,confidence)
-    return display
+    if from_home:
+        display = """
+        <h1 >{}</h1>
+        <p>This news is probably <b>{}</b>!</p>
+        <p>Prediction confidence: {}</p>
+        """.format(title,predicted_str,confidence)
+        return display
+    else:
+        to_return = to_insert
+        return jsonify(to_return)
 
 def read_content_from_url(news_url):
     doc = extractor.get_doc_from_url(news_url)
@@ -86,6 +92,7 @@ def predict_fake_news(content_tfidf):
     return predicted_str,confidence
 
 def insert_to_bigquery(to_insert):
+    global table
     rows_to_insert = [to_insert]
     errors = client.insert_rows(table, rows_to_insert)  # API request
     assert errors == []
