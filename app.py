@@ -38,7 +38,7 @@ def classify_news(from_home):
         news_url = request.json['text']
 
     content,title = read_content_from_url(news_url)
-    content_tfidf = preprocess_and_transform(content,title)
+    content_tfidf,coverage = preprocess_and_transform(content,title)
     predicted_str,confidence = predict_fake_news(content_tfidf)
 
     to_insert = {
@@ -48,7 +48,8 @@ def classify_news(from_home):
         'prediction': predicted_str,
         'confidence': confidence,
         'url': news_url,
-        'prediction_date': datetime.datetime.now()
+        'prediction_date': datetime.datetime.now(),
+        'coverage': coverage
 
     }
     insert_to_bigquery(to_insert)
@@ -75,11 +76,19 @@ def preprocess_and_transform(content,title):
     
     feature_path = os.path.join(models_folder,model_name,"feature_{}.pickle".format(model_name))
     count_vect = CountVectorizer(decode_error="replace",vocabulary=pickle.load(open(feature_path, "rb")))
+
+    #Get word coverage
+    tokenizer = count_vect.build_tokenizer()
+    feature_vocab = count_vect.get_feature_names()
+    feature_content = tokenizer(content)
+    intesection = [x for x in feature_content if x in feature_vocab]
+    coverage = len(intesection)/len(feature_content)
+
     tfidf_transformer = TfidfTransformer()
     content_counts = count_vect.transform([content])
     content_tfidf = tfidf_transformer.fit_transform(content_counts)
 
-    return content_tfidf
+    return content_tfidf,coverage
 
 def predict_fake_news(content_tfidf):
     model_path = os.path.join(models_folder,model_name,"{}.joblib".format(model_name))
