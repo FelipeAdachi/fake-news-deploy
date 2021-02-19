@@ -38,7 +38,7 @@ def classify_news(from_home):
         news_url = request.json['text']
 
     content,title = read_content_from_url(news_url)
-    content_tfidf,coverage = preprocess_and_transform(content,title)
+    content_tfidf,coverage,word_count = preprocess_and_transform(content,title)
     predicted_str,confidence = predict_fake_news(content_tfidf)
 
     to_insert = {
@@ -49,7 +49,8 @@ def classify_news(from_home):
         'confidence': confidence,
         'url': news_url,
         'prediction_date': datetime.datetime.now(),
-        'coverage': coverage
+        'coverage': coverage,
+        'word_count': word_count
 
     }
     insert_to_bigquery(to_insert)
@@ -81,6 +82,7 @@ def preprocess_and_transform(content,title):
     tokenizer = count_vect.build_tokenizer()
     feature_vocab = count_vect.get_feature_names()
     feature_content = tokenizer(content)
+    word_count = len(feature_content)
     intesection = [x for x in feature_content if x in feature_vocab]
     coverage = len(intesection)/len(feature_content)
 
@@ -88,7 +90,7 @@ def preprocess_and_transform(content,title):
     content_counts = count_vect.transform([content])
     content_tfidf = tfidf_transformer.fit_transform(content_counts)
 
-    return content_tfidf,coverage
+    return content_tfidf,coverage,word_count
 
 def predict_fake_news(content_tfidf):
     model_path = os.path.join(models_folder,model_name,"{}.joblib".format(model_name))
